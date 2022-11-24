@@ -3,24 +3,33 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
-import { Student } from 'src/student/entities/student.entity';
-import { Role } from 'src/user/enums/user.enum';
-import { In } from 'typeorm';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Student } from '../student/entities/student.entity';
+import { Role } from '../user/enums/user.enum';
+import { In, Repository } from 'typeorm';
 import { ProgramDto } from './dto/program.dto';
 import { Program } from './entities/program.entity';
 
 @Injectable()
 export class ConfigurationService {
+  constructor(
+    @InjectRepository(Program)
+    private programRepository: Repository<Program>,
+  ) {}
   async getPrograms(user: any) {
-    let params = null;
-    if (user.role === Role.USER)
-      params = { relations: ['students'], where: { userId: user.id } };
-    else params = { relations: ['students'] };
+    const queryBuilder = this.programRepository.createQueryBuilder('q');
+    queryBuilder.leftJoinAndSelect('q.students', 'students');
+    queryBuilder.loadRelationCountAndMap('q.studentsCount', 'q.students');
 
-    const programs = await Program.find(params);
-    console.log(programs);
-
-    return programs;
+    queryBuilder.select([
+      'q.id',
+      'q.name',
+      'students.id',
+      'students.name',
+      'students.dateAdmission',
+    ]);
+    if (user.role === Role.USER) queryBuilder.where(`q.userId=${user.id}`);
+    return await queryBuilder.getMany();
   }
 
   async createProgram(program: ProgramDto, user: any) {
